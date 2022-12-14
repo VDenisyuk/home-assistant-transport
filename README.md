@@ -1,4 +1,4 @@
-# Berlin (BVG), Brandenburg (VBB) and Dresden (VVO) transport widget for Home Assistant
+# Berlin (BVG), Brandenburg (VBB) transport widget for Home Assistant
 
 Custom sensor component and lovelace card that displays upcoming departures from your defined public transport stops for Berlin and Brandenburg.
 
@@ -10,7 +10,7 @@ Custom sensor component and lovelace card that displays upcoming departures from
 
 The component consists of two parts:
 
-1. A sensor, which tracks departures via [VBB public API](https://v5.vbb.transport.rest/api.html#get-stopsiddepartures) (for Berlin) or VVO Public API (for Dresden) every 90 seconds
+1. A sensor, which tracks departures via [VBB public API](https://v5.vbb.transport.rest/api.html#get-stopsiddepartures) every 90 seconds
 2. A widget (card) for the lovelace dashboard, which displays upcoming transport in a nice way
 
 We will look at the installation of each of them separately below. But first, let's learn how to find the Stop IDs.
