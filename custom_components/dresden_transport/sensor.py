@@ -17,10 +17,12 @@ from .const import (  # pylint: disable=unused-import
     DOMAIN,  # noqa
     SCAN_INTERVAL,  # noqa
     API_ENDPOINT,
+    API_ENDPOINT_TRIP,
     API_MAX_RESULTS,
     CONF_DEPARTURES,
     CONF_DEPARTURES_DIRECTION,
     CONF_DEPARTURES_STOP_ID,
+    CONF_DEPARTURES_DESTINATION_ID,
     CONF_DEPARTURES_WALKING_TIME,
     CONF_TYPE_BUS,
     CONF_TYPE_EXPRESS,
@@ -53,6 +55,7 @@ PLATFORM_SCHEMA = PLATFORM_SCHEMA.extend(
                 vol.Required(CONF_DEPARTURES_NAME): str,
                 vol.Required(CONF_DEPARTURES_STOP_ID): int,
                 vol.Optional(CONF_DEPARTURES_DIRECTION): str,
+                vol.Optional(CONF_DEPARTURES_DESTINATION_ID): int,
                 vol.Optional(CONF_DEPARTURES_WALKING_TIME, default=1): int,
                 **TRANSPORT_TYPES_SCHEMA,
             }
@@ -81,6 +84,7 @@ class TransportSensor(SensorEntity):
         self.stop_id: int = config[CONF_DEPARTURES_STOP_ID]
         self.sensor_name: str | None = config.get(CONF_DEPARTURES_NAME)
         self.direction: str | None = config.get(CONF_DEPARTURES_DIRECTION)
+        self.destination_id: int | None = config.get(CONF_DEPARTURES_DESTINATION_ID)
         self.walking_time: int = config.get(CONF_DEPARTURES_WALKING_TIME) or 1
         # we add +1 minute anyway to delete the "just gone" transport
 
@@ -116,17 +120,59 @@ class TransportSensor(SensorEntity):
         self.departures = self.fetch_departures()
 
     def fetch_departures(self) -> Optional[list[Departure]]:
+        if self.destination_id == None:
+            try:
+                response = requests.get(
+                    url=f"{API_ENDPOINT}",
+                    params={
+                        "time": (
+                            datetime.now() + timedelta(minutes=self.walking_time)
+                        ).isoformat(),
+                        "format": "json",
+                        "limit": API_MAX_RESULTS,
+                        "stopID": self.stop_id,
+                        "isarrival": False,
+                        "shorttermchanges": True,
+                        "mentzonly": False,
+                    },
+                    timeout=30,
+                )
+                response.raise_for_status()
+            except requests.exceptions.HTTPError as ex:
+                _LOGGER.warning(f"API error: {ex}")
+                return []
+            except requests.exceptions.Timeout as ex:
+                _LOGGER.warning(f"API timeout: {ex}")
+                return []
+
+            _LOGGER.debug(f"OK: departures for {self.stop_id}: {response.text}")
+
+            # parse JSON response
+            try:
+                departures = response.json().get('Departures')
+            except requests.exceptions.InvalidJSONError as ex:
+                _LOGGER.error(f"API invalid JSON: {ex}")
+                return []
+
+            # convert api data into objects
+            unsorted = [Departure.from_dict(departure) for departure in departures]
+            return sorted(unsorted, key=lambda d: d.timestamp)
+        else:
+            return self.fetch_departures_directional()
+
+    def fetch_departures_directional(self) -> Optional[list[Departure]]:
         try:
             response = requests.get(
-                url=f"{API_ENDPOINT}",
+                url=f"{API_ENDPOINT_TRIP}",
                 params={
                     "time": (
                         datetime.now() + timedelta(minutes=self.walking_time)
                     ).isoformat(),
                     "format": "json",
                     "limit": API_MAX_RESULTS,
-                    "stopID": self.stop_id,
-                    "isarrival": False,
+                    "origin": self.stop_id,
+                    "destination": self.destination_id,
+                    "isarrivaltime": False,
                     "shorttermchanges": True,
                     "mentzonly": False,
                 },
@@ -144,15 +190,16 @@ class TransportSensor(SensorEntity):
 
         # parse JSON response
         try:
-            departures = response.json().get('Departures')
+            routes = response.json().get('Routes')
         except requests.exceptions.InvalidJSONError as ex:
             _LOGGER.error(f"API invalid JSON: {ex}")
             return []
 
         # convert api data into objects
-        unsorted = [Departure.from_dict(departure) for departure in departures]
-        return sorted(unsorted, key=lambda d: d.timestamp)
-
+        unsorted_departures = [Departure.from_dict_dir(route) for route in routes]
+        #unsorted = [Departure.from_dict(departure) for departure in departures]
+        return sorted(unsorted_departures, key=lambda d: d.timestamp)
+    
     def next_departure(self):
         if self.departures and isinstance(self.departures, list):
             return self.departures[0]
