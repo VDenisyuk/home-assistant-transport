@@ -43,7 +43,9 @@ sensor:
         stop_id: 33000112 # actual Stop ID for the API
       - name: "Altmarkt" # you can add more that one stop to track
         stop_id: 33000004
-        
+      - name: "Hauptbahnhof --> Nürnberger Platz" # Only show Departures in that direction
+        stop_id: 33000028
+        destination_id: 33000132 # you can add a destination ID (using the same approach as for the stop ID) to show only usable departures for that direction/trip 
         # Optional parameter with value in minutes that hide transport closer than N minutes
         # walking_time: 5
 ```
